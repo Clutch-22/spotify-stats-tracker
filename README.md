@@ -50,7 +50,7 @@ Open `http://localhost:5173` and drop your `Streaming_History_Audio_*.json` file
 
 ## Privacy
 
-This tool processes everything locally in your browser using JavaScript. No data is sent to any server. No analytics. No tracking. No cookies. You can verify this yourself — the source code is right here.
+This tool processes everything locally in your browser using JavaScript. No data is sent to any server: no analytics, no tracking, no cookies. You can verify this yourself if you wish — this project is open-source.
 
 ## Tech Stack
 
