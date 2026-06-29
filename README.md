@@ -17,7 +17,7 @@ Drop your Spotify data export files in and instantly see:
 - **Time-of-day patterns** revealing when you listen most
 - **Platform breakdown** (iOS, desktop, web, etc.)
 
-Supports both Spotify's **basic streaming history** (last 12 months) and **extended streaming history** (your entire account history). Upload one file or many — the tool merges everything automatically.
+Supports both Spotify's **basic streaming history** (last 12 months) and **extended streaming history** (your entire account history). Upload one file – or many! The tool merges everything automatically.
 
 ## How to Get Your Spotify Data
 
@@ -35,7 +35,7 @@ Supports both Spotify's **basic streaming history** (last 12 months) and **exten
 2. Under "Download your data," check **Extended streaming history**
 3. Click **Request data**
 4. Confirm via the email Spotify sends you
-5. Wait for delivery (1–30 days, usually under a week)
+5. Wait for delivery (1-30 days, usually under a week)
 
 ## Getting Started
 
@@ -60,4 +60,4 @@ This tool processes everything locally in your browser using JavaScript. No data
 
 ## License
 
-Non-Commercial – free for personal use. See LICENSE for details. For commercial licensing, contact lobsterpeggle@proton.me
+Non-Commercial – free for personal use. See LICENSE for details. For commercial licensing, contact clutch22etal@proton.me
