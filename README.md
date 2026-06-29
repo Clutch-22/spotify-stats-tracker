@@ -1,10 +1,10 @@
-# 🎧 Spotify Stats Tracker
+# Spotify Stats Tracker (v 0.1.0)
 
-**You shouldn't have to pay someone to show you your own data.**
+**Nowadays, you have to pay people to show you your own data. Screw that.**
 
-A free, open-source, privacy-first alternative to paid Spotify stats services. No accounts, no subscriptions, no data collection. Your listening history never leaves your browser.
+This repository is the first iteration (v 0.1.0) of a free, open-source, privacy-first alternative to paid Spotify stats services. No accounts, no subscriptions, no data collection, no servers required! Your listening history never leaves your browser, nor your device.
 
-Services like Must.fm charged $18/year to store your data on their servers — then went defunct, taking everyone's history with them. This tool runs entirely in your browser. There's nothing to sign up for, nothing to pay, and nothing that can disappear.
+Services like Must.fm charge $18/year to track spotify data – then the Spotify's code changed, the app's functionality got kneecapped, and people never heard of their hard-spent money again. Pretty scummy, right? Well, _this_ tool runs entirely in your browser. There's nothing to sign up for, nothing to pay, and nothing that can disappear – after all, it only tracks data that _you_ upload to it.
 
 ## What It Does
 
@@ -29,15 +29,13 @@ Supports both Spotify's **basic streaming history** (last 12 months) and **exten
 4. Confirm via the email Spotify sends you
 5. Download when ready (usually a few days)
 
-### Extended History (your full history, back to day one)
+### Extended History (your full history, regardless of cringe)
 
 1. Go to [spotify.com/account/privacy](https://www.spotify.com/account/privacy/)
 2. Under "Download your data," check **Extended streaming history**
 3. Click **Request data**
 4. Confirm via the email Spotify sends you
 5. Wait for delivery (1–30 days, usually under a week)
-
-The extended history is worth the wait. It includes every stream since you created your account.
 
 ## Getting Started
 
@@ -62,4 +60,4 @@ This tool processes everything locally in your browser using JavaScript. No data
 
 ## License
 
-MIT — do whatever you want with it.
+Non-Commercial – free for personal use. See LICENSE for details. For commercial licensing, contact lobsterpeggle@proton.me
