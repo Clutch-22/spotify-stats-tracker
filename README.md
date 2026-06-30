@@ -1,8 +1,8 @@
-# Spotify Stats Tracker (v 0.1.0)
+# Spotify Stats Tracker (v 0.2.0)
 
 **Nowadays, you have to pay people to show you your own data. Screw that.**
 
-This repository is the first iteration (v 0.1.0) of a free, open-source, privacy-first alternative to paid Spotify stats services. No accounts, no subscriptions, no data collection, no servers required! Your listening history never leaves your browser, nor your device.
+This repository is the second iteration (v 0.2.0) of a free, open-source, privacy-first alternative to paid Spotify stats services. No accounts, no subscriptions, no data collection, no servers required! Your listening history never leaves your browser, nor your device.
 
 Services like Must.fm charge $18/year to track spotify data – then the code of Spotify's listening history changed, the app's functionality got kneecapped, and people never heard of their hard-spent money again. Pretty scummy, right? Well, _this_ tool runs entirely in your browser. There's nothing to sign up for, nothing to pay, and nothing that can disappear – after all, it only tracks data that _you_ upload to it.
 
