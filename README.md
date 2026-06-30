@@ -27,7 +27,7 @@ Supports both Spotify's **basic streaming history** (last 12 months) and **exten
 2. Under "Download your data," check **Account data**
 3. Click **Request data**
 4. Confirm via the email Spotify sends you
-5. Download when ready (usually a few days)
+5. Download when ready (usually a few hours)
 
 ### Extended History (your full history, regardless of cringe)
 
