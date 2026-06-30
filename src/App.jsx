@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, Cell, PieChart, Pie } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, Cell } from "recharts";
 
 const GREEN = "#1DB954";
 const BG = "#121212";
@@ -23,85 +23,117 @@ function detectAndParse(raw) {
   const sample = raw[0];
   if (sample.ts && sample.ms_played !== undefined) {
     return raw.map(e => ({
-      ts: e.ts,
-      artist: e.master_metadata_album_artist_name,
-      track: e.master_metadata_track_name,
-      album: e.master_metadata_album_album_name,
-      ms: e.ms_played,
-      platform: e.platform || "unknown",
-      skipped: e.skipped || false,
-      shuffle: e.shuffle || false,
-      reason_end: e.reason_end || "",
-      isMusic: !!e.master_metadata_track_name,
-      isPodcast: !!e.episode_name,
+      ts: e.ts, artist: e.master_metadata_album_artist_name,
+      track: e.master_metadata_track_name, album: e.master_metadata_album_album_name,
+      ms: e.ms_played, platform: e.platform || "unknown",
+      skipped: e.skipped || false, isMusic: !!e.master_metadata_track_name,
     }));
   }
   if (sample.endTime && sample.msPlayed !== undefined) {
     return raw.map(e => ({
-      ts: e.endTime.replace(" ", "T") + ":00Z",
-      artist: e.artistName,
-      track: e.trackName,
-      ms: e.msPlayed,
-      album: null,
-      platform: "unknown",
-      skipped: false,
-      shuffle: false,
-      reason_end: "",
-      isMusic: true,
-      isPodcast: false,
+      ts: e.endTime.replace(" ", "T") + ":00Z", artist: e.artistName,
+      track: e.trackName, ms: e.msPlayed, album: null,
+      platform: "unknown", skipped: false, isMusic: true,
     }));
   }
   return null;
 }
 
-function analyze(entries) {
-  const music = entries.filter(e => e.isMusic && e.ms > 5000);
-  const totalMs = music.reduce((s, e) => s + e.ms, 0);
-  const artists = {}, tracks = {}, monthly = {}, hourly = Array(24).fill(0), yearly = {}, platforms = {};
+function filterByTime(entries, filter) {
+  if (filter === "all") return entries;
+  const now = new Date();
+  const cutoff = new Date(now);
+  if (filter === "week") cutoff.setDate(now.getDate() - 7);
+  else if (filter === "month") cutoff.setDate(now.getDate() - 30);
+  else if (filter === "year") cutoff.setFullYear(now.getFullYear() - 1);
+  return entries.filter(e => new Date(e.ts) >= cutoff);
+}
 
-  music.forEach(e => {
-    if (e.artist) artists[e.artist] = (artists[e.artist] || 0) + e.ms;
+function computeSummary(entries) {
+  const totalMs = entries.reduce((s, e) => s + e.ms, 0);
+  const artists = new Set(), tracks = new Set();
+  const yearly = {}, hourly = Array(24).fill(0), platforms = {};
+  entries.forEach(e => {
+    if (e.artist) artists.add(e.artist);
+    if (e.track) tracks.add(`${e.track}|||${e.artist}`);
+    const d = new Date(e.ts);
+    const yr = d.getUTCFullYear();
+    yearly[yr] = (yearly[yr] || 0) + e.ms;
+    hourly[d.getUTCHours()] += e.ms;
+    const p = (e.platform || "unknown").split(" ")[0].toLowerCase();
+    const plat = p.includes("ios") ? "iOS" : p.includes("android") ? "Android" :
+      p.includes("os x") || p.includes("macos") ? "macOS" :
+      p.includes("windows") ? "Windows" : p.includes("web") ? "Web" : "Other";
+    platforms[plat] = (platforms[plat] || 0) + e.ms;
+  });
+  const yearlyData = Object.entries(yearly).sort((a, b) => +a[0] - +b[0])
+    .map(([year, ms]) => ({ year, hours: Math.round(msToH(ms)), ms }));
+  const hourlyData = hourly.map((ms, h) => ({
+    hour: h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`,
+    hours: Math.round(msToH(ms) * 10) / 10
+  }));
+  const platformData = Object.entries(platforms).sort((a, b) => b[1] - a[1])
+    .map(([name, ms]) => ({ name, ms, pct: Math.round(ms / totalMs * 100) }));
+  const dates = entries.map(e => new Date(e.ts));
+  return {
+    totalMs, totalEntries: entries.length,
+    uniqueArtists: artists.size, uniqueTracks: tracks.size,
+    yearlyData, hourlyData, platformData,
+    from: new Date(Math.min(...dates)), to: new Date(Math.max(...dates)),
+  };
+}
+
+function computeTopArtists(entries) {
+  const artists = {};
+  entries.forEach(e => { if (e.artist) artists[e.artist] = (artists[e.artist] || 0) + e.ms; });
+  return Object.entries(artists).sort((a, b) => b[1] - a[1]).slice(0, 20)
+    .map(([name, ms], i) => ({ name, ms, rank: i + 1 }));
+}
+
+function computeTopTracks(entries, sortBy) {
+  const tracks = {};
+  entries.forEach(e => {
     if (e.track && e.artist) {
       const k = `${e.track}|||${e.artist}`;
       if (!tracks[k]) tracks[k] = { name: e.track, artist: e.artist, ms: 0, plays: 0 };
       tracks[k].ms += e.ms;
       tracks[k].plays += 1;
     }
-    const d = new Date(e.ts);
-    const yr = d.getUTCFullYear();
-    yearly[yr] = (yearly[yr] || 0) + e.ms;
-    const mk = `${yr}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    monthly[mk] = (monthly[mk] || 0) + e.ms;
-    hourly[d.getUTCHours()] += e.ms;
-    const p = (e.platform || "unknown").split(" ")[0].toLowerCase();
-    const plat = p.includes("ios") ? "iOS" : p.includes("android") ? "Android" : p.includes("os x") || p.includes("macos") ? "macOS" : p.includes("windows") ? "Windows" : p.includes("web") ? "Web" : "Other";
-    platforms[plat] = (platforms[plat] || 0) + e.ms;
   });
+  return Object.values(tracks)
+    .sort((a, b) => sortBy === "hours" ? b.ms - a.ms : b.plays - a.plays)
+    .slice(0, 20).map((t, i) => ({ ...t, rank: i + 1 }));
+}
 
-  const topArtists = Object.entries(artists).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, ms], i) => ({ name, ms, rank: i + 1 }));
-  const topTracks = Object.values(tracks).sort((a, b) => b.plays - a.plays).slice(0, 20).map((t, i) => ({ ...t, rank: i + 1 }));
-  const monthlyData = Object.entries(monthly).sort((a, b) => a[0].localeCompare(b[0])).map(([m, ms]) => {
+function computeChartData(entries, filter) {
+  const filtered = filterByTime(entries, filter);
+  if (filter === "week" || filter === "month") {
+    const daily = {};
+    filtered.forEach(e => {
+      const d = new Date(e.ts);
+      const dk = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      daily[dk] = (daily[dk] || 0) + e.ms;
+    });
+    return Object.entries(daily).sort((a, b) => a[0].localeCompare(b[0])).map(([d, ms]) => {
+      const parts = d.split("-");
+      const dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const label = filter === "week" ? dow[new Date(d + "T00:00:00Z").getUTCDay()] : `${+parts[1]}/${+parts[2]}`;
+      return { label, hours: Math.round(msToH(ms) * 10) / 10 };
+    });
+  }
+  const monthly = {};
+  filtered.forEach(e => {
+    const d = new Date(e.ts);
+    const mk = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    monthly[mk] = (monthly[mk] || 0) + e.ms;
+  });
+  let data = Object.entries(monthly).sort((a, b) => a[0].localeCompare(b[0]));
+  if (filter === "year") data = data.slice(-12);
+  return data.map(([m, ms]) => {
     const [y, mo] = m.split("-");
     const labels = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-    return { month: `${labels[+mo - 1]}'${y.slice(2)}`, hours: Math.round(msToH(ms) * 10) / 10, fullMonth: m };
+    return { label: `${labels[+mo - 1]}'${y.slice(2)}`, hours: Math.round(msToH(ms) * 10) / 10 };
   });
-  const hourlyData = hourly.map((ms, h) => ({
-    hour: h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`,
-    hours: Math.round(msToH(ms) * 10) / 10
-  }));
-  const yearlyData = Object.entries(yearly).sort((a, b) => +a[0] - +b[0]).map(([year, ms]) => ({
-    year, hours: Math.round(msToH(ms)), ms
-  }));
-  const platformData = Object.entries(platforms).sort((a, b) => b[1] - a[1]).map(([name, ms]) => ({ name, ms, pct: Math.round(ms / totalMs * 100) }));
-  const skippedCount = entries.filter(e => e.skipped).length;
-  const dates = music.map(e => new Date(e.ts));
-
-  return {
-    totalMs, totalEntries: music.length, uniqueArtists: Object.keys(artists).length,
-    uniqueTracks: Object.keys(tracks).length, topArtists, topTracks, monthlyData,
-    hourlyData, yearlyData, platformData, skippedCount, totalRaw: entries.length,
-    from: new Date(Math.min(...dates)), to: new Date(Math.max(...dates)),
-  };
 }
 
 function Tip({ active, payload, label, unit }) {
@@ -124,18 +156,38 @@ function Stat({ label, value, sub }) {
   );
 }
 
+function Toggle({ options, value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+      {options.map(([k, l]) => (
+        <button key={k} onClick={() => onChange(k)} style={{
+          background: value === k ? GREEN : "transparent",
+          color: value === k ? "#000" : DIM,
+          border: `1px solid ${value === k ? GREEN : BORDER}`,
+          borderRadius: 4, padding: "3px 10px", fontSize: 11,
+          fontWeight: value === k ? 600 : 400, cursor: "pointer",
+          transition: "all 0.15s"
+        }}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
+const TIME_OPTIONS = [["all", "All Time"], ["week", "Past Week"], ["month", "Past Month"], ["year", "Past Year"]];
+
 export default function App() {
-  const [data, setData] = useState(null);
+  const [entries, setEntries] = useState(null);
   const [tab, setTab] = useState("artists");
+  const [trackSort, setTrackSort] = useState("plays");
+  const [rankFilter, setRankFilter] = useState("all");
+  const [chartFilter, setChartFilter] = useState("all");
   const [dragOver, setDragOver] = useState(false);
   const [err, setErr] = useState(null);
-  const [fileCount, setFileCount] = useState(0);
 
   const handleFiles = useCallback((files) => {
     setErr(null);
     const fileArr = Array.from(files).filter(f => f.name.endsWith(".json"));
     if (fileArr.length === 0) { setErr("No JSON files found."); return; }
-    setFileCount(fileArr.length);
     let allEntries = [];
     let loaded = 0;
     fileArr.forEach(file => {
@@ -148,8 +200,9 @@ export default function App() {
         } catch (e) { /* skip bad files */ }
         loaded++;
         if (loaded === fileArr.length) {
-          if (allEntries.length === 0) { setErr("No valid streaming history found in those files."); return; }
-          setData(analyze(allEntries));
+          const music = allEntries.filter(e => e.isMusic && e.ms > 5000);
+          if (music.length === 0) { setErr("No valid streaming history found."); return; }
+          setEntries(music);
         }
       };
       reader.readAsText(file);
@@ -161,7 +214,13 @@ export default function App() {
     handleFiles(e.dataTransfer.files);
   }, [handleFiles]);
 
-  if (!data) {
+  const summary = useMemo(() => entries ? computeSummary(entries) : null, [entries]);
+  const rankEntries = useMemo(() => entries ? filterByTime(entries, rankFilter) : [], [entries, rankFilter]);
+  const topArtists = useMemo(() => rankEntries.length ? computeTopArtists(rankEntries) : [], [rankEntries]);
+  const topTracks = useMemo(() => rankEntries.length ? computeTopTracks(rankEntries, trackSort) : [], [rankEntries, trackSort]);
+  const chartData = useMemo(() => entries ? computeChartData(entries, chartFilter) : [], [entries, chartFilter]);
+
+  if (!entries) {
     return (
       <div style={{ background: BG, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter','Helvetica Neue',sans-serif", padding: 24 }}>
         <div onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop}
@@ -183,14 +242,16 @@ export default function App() {
     );
   }
 
-  const s = data;
-  const maxA = s.topArtists[0]?.ms || 1;
-  const maxT = s.topTracks[0]?.plays || 1;
+  const s = summary;
+  const maxA = topArtists[0]?.ms || 1;
+  const maxT = trackSort === "plays" ? (topTracks[0]?.plays || 1) : (topTracks[0]?.ms || 1);
   const barColors = s.hourlyData.map(d => {
     const max = Math.max(...s.hourlyData.map(x => x.hours));
     const t = max > 0 ? d.hours / max : 0;
     return `rgb(${Math.round(29 + 20 * (1 - t))},${Math.round(185 - 80 * (1 - t))},${Math.round(84 - 30 * (1 - t))})`;
   });
+
+  const noRankData = rankEntries.length === 0;
 
   return (
     <div style={{ background: BG, minHeight: "100vh", fontFamily: "'Inter','Helvetica Neue',sans-serif", color: TEXT, padding: "28px 20px" }}>
@@ -228,18 +289,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* Monthly Trend */}
+        {/* Monthly Trend with filter */}
         <div style={{ background: CARD, borderRadius: 10, padding: "18px 18px 10px", marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Listening Over Time</div>
-          <ResponsiveContainer width="100%" height={170}>
-            <AreaChart data={s.monthlyData}>
-              <defs><linearGradient id="gF" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GREEN} stopOpacity={0.4} /><stop offset="100%" stopColor={GREEN} stopOpacity={0.02} /></linearGradient></defs>
-              <XAxis dataKey="month" tick={{ fill: DIM, fontSize: 9 }} axisLine={false} tickLine={false} interval={5} />
-              <YAxis tick={{ fill: DIM, fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
-              <Tooltip content={<Tip />} />
-              <Area type="monotone" dataKey="hours" stroke={GREEN} strokeWidth={1.5} fill="url(#gF)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Listening Over Time</div>
+            <Toggle options={TIME_OPTIONS} value={chartFilter} onChange={setChartFilter} />
+          </div>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={170}>
+              <AreaChart data={chartData}>
+                <defs><linearGradient id="gF" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GREEN} stopOpacity={0.4} /><stop offset="100%" stopColor={GREEN} stopOpacity={0.02} /></linearGradient></defs>
+                <XAxis dataKey="label" tick={{ fill: DIM, fontSize: 9 }} axisLine={false} tickLine={false} interval={chartFilter === "week" ? 0 : chartFilter === "month" ? 2 : 5} />
+                <YAxis tick={{ fill: DIM, fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
+                <Tooltip content={<Tip />} />
+                <Area type="monotone" dataKey="hours" stroke={GREEN} strokeWidth={1.5} fill="url(#gF)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ color: DIM, fontSize: 13, padding: "40px 0", textAlign: "center" }}>No data for this time range.</div>
+          )}
         </div>
 
         {/* When You Listen + Platform */}
@@ -268,20 +336,32 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-          {[["artists", "Top Artists"], ["tracks", "Top Tracks"]].map(([k, l]) => (
-            <button key={k} onClick={() => setTab(k)} style={{
-              background: tab === k ? GREEN : CARD, color: tab === k ? "#000" : DIM,
-              border: "none", borderRadius: 6, padding: "8px 20px", fontSize: 13,
-              fontWeight: tab === k ? 700 : 500, cursor: "pointer"
-            }}>{l}</button>
-          ))}
+        {/* Tabs + Time Filter for rankings */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[["artists", "Top Artists"], ["tracks", "Top Tracks"]].map(([k, l]) => (
+              <button key={k} onClick={() => setTab(k)} style={{
+                background: tab === k ? GREEN : CARD, color: tab === k ? "#000" : DIM,
+                border: "none", borderRadius: 6, padding: "8px 20px", fontSize: 13,
+                fontWeight: tab === k ? 700 : 500, cursor: "pointer"
+              }}>{l}</button>
+            ))}
+          </div>
+          <Toggle options={TIME_OPTIONS} value={rankFilter} onChange={setRankFilter} />
         </div>
 
+        {/* Sort toggle for tracks */}
+        {tab === "tracks" && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <Toggle options={[["plays", "By Plays"], ["hours", "By Hours"]]} value={trackSort} onChange={setTrackSort} />
+          </div>
+        )}
+
         <div style={{ background: CARD, borderRadius: 10, overflow: "hidden" }}>
-          {tab === "artists" ? s.topArtists.map((a, i) => (
-            <div key={a.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < s.topArtists.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+          {noRankData ? (
+            <div style={{ color: DIM, fontSize: 13, padding: "40px 0", textAlign: "center" }}>No data for this time range.</div>
+          ) : tab === "artists" ? topArtists.map((a, i) => (
+            <div key={a.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < topArtists.length - 1 ? `1px solid ${BORDER}` : "none" }}>
               <span style={{ color: DIM, fontSize: 13, width: 24, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{a.rank}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
@@ -291,26 +371,26 @@ export default function App() {
               </div>
               <span style={{ color: DIM, fontSize: 12, whiteSpace: "nowrap" }}>{fmt(a.ms)}</span>
             </div>
-          )) : s.topTracks.map((t, i) => (
-            <div key={`${t.name}-${t.artist}-${i}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < s.topTracks.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+          )) : topTracks.map((t, i) => (
+            <div key={`${t.name}-${t.artist}-${i}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < topTracks.length - 1 ? `1px solid ${BORDER}` : "none" }}>
               <span style={{ color: DIM, fontSize: 13, width: 24, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{t.rank}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{t.name}</div>
                 <div style={{ fontSize: 12, color: DIM }}>{t.artist}</div>
                 <div style={{ marginTop: 4, height: 4, borderRadius: 2, background: BORDER }}>
-                  <div style={{ height: "100%", borderRadius: 2, background: GREEN, width: `${(t.plays / maxT) * 100}%` }} />
+                  <div style={{ height: "100%", borderRadius: 2, background: GREEN, width: `${(trackSort === "plays" ? t.plays / maxT : t.ms / maxT) * 100}%` }} />
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <span style={{ color: DIM, fontSize: 12 }}>{t.plays} plays</span>
-                <div style={{ color: DIM, fontSize: 11 }}>{fmt(t.ms)}</div>
+                <span style={{ color: trackSort === "plays" ? GREEN : DIM, fontSize: 12, fontWeight: trackSort === "plays" ? 600 : 400 }}>{t.plays} plays</span>
+                <div style={{ color: trackSort === "hours" ? GREEN : DIM, fontSize: 11, fontWeight: trackSort === "hours" ? 600 : 400 }}>{fmt(t.ms)}</div>
               </div>
             </div>
           ))}
         </div>
 
         <div style={{ textAlign: "center", padding: "28px 0 12px", color: DIM, fontSize: 11 }}>
-          Built by Cassidy Kirz · Your data never leaves your browser · Streams under 5s excluded
+          Built by Clutch-22 · Your data never leaves your browser · Streams under 5s excluded
         </div>
       </div>
     </div>
